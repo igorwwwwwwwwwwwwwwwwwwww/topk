@@ -45,6 +45,10 @@ Alternatively, it's also possible to pipe from stdin:
 $ cat types.txt | topk
 ```
 
+## Why
+
+Because my fingers hurt from typing `sort | uniq -c | sort -rn | head`.
+
 ## Similar to
 
 - [logtop](https://github.com/igorwwwwwwwwwwwwwwwwwwww/logtop)
