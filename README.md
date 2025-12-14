@@ -1,11 +1,11 @@
 # topk
 
-A small\* utility for ad-hoc top-k analysis built in go using [DuckDB](https://duckdb.org/).
+A small utility for ad-hoc top-k analysis built in go.
 
 ## Install
 
 ```
-$ go install github.com/igorwwwwwwwwwwwwwwwwwwww/topk
+$ go install github.com/igorwwwwwwwwwwwwwwwwwwww/topk@latest
 ```
 
 ## Usage
@@ -44,6 +44,11 @@ Alternatively, it's also possible to pipe from stdin:
 ```
 $ cat types.txt | topk
 ```
+
+## Similar to
+
+- [logtop](https://github.com/igorwwwwwwwwwwwwwwwwwwww/logtop)
+- [log2hist](https://github.com/igorwwwwwwwwwwwwwwwwwwww/log2hist)
 
 ## License
 

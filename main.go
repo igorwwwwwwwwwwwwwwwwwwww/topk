@@ -1,85 +1,119 @@
 package main
 
 import (
-	"context"
-	"database/sql"
+	"bufio"
+	"container/heap"
 	"flag"
 	"fmt"
 	"log"
-	"log/slog"
 	"os"
+	"sort"
 	"strings"
-
-	_ "github.com/duckdb/duckdb-go/v2"
 )
 
 var k = flag.Int("k", 10, "limit to this many top values")
 var other = flag.Bool("other", false, "include sum count of remaining values")
 
+type KVPair struct {
+	Item  string
+	Count int
+}
+
+type MaxHeap []KVPair
+
+func (h MaxHeap) Len() int           { return len(h) }
+func (h MaxHeap) Less(i, j int) bool { return h[i].Count < h[j].Count }
+func (h MaxHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+func (h *MaxHeap) Push(x any) {
+	*h = append(*h, x.(KVPair))
+}
+
+func (h *MaxHeap) Pop() any {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
 func main() {
 	flag.Parse()
 
-	ctx := context.Background()
+	reader := os.Stdin
 
-	filename := "/dev/stdin"
 	if flag.NArg() > 0 {
-		filename = flag.Arg(0)
-	}
-
-	db, err := sql.Open("duckdb", "")
-	if err != nil {
-		slog.Error("failed to open db", "err", err)
-		os.Exit(1)
-	}
-
-	query := `
-		WITH all_data AS (
-			SELECT #1 as item
-			FROM read_csv(?1, header=FALSE, delim='\n')
-		),
-		counts AS (
-			SELECT item, COUNT(*) as cnt
-			FROM all_data
-			GROUP BY item
-		),
-		topk AS (
-			SELECT item, cnt, ROW_NUMBER() OVER (ORDER BY cnt DESC) as rn
-			FROM counts
-		),
-		results AS (
-			SELECT item, cnt FROM topk WHERE rn <= ?2
-			UNION ALL
-			SELECT 'OTHER', COALESCE(SUM(cnt), 0) FROM topk WHERE rn > ?2 AND ?3
-		)
-		SELECT
-			item,
-			cnt,
-			(SELECT MAX(LENGTH(item)) FROM results) as max_len,
-			CAST(cnt * 50.0 / MAX(cnt) OVER () AS INTEGER) as bar_width
-		FROM results
-		ORDER BY CASE WHEN item = 'OTHER' THEN 1 ELSE 0 END, cnt DESC`
-
-	rows, err := db.QueryContext(ctx, query, filename, *k, *other)
-	if err != nil {
-		log.Fatalf("could not query db: %s", err.Error())
-	}
-	defer rows.Close()
-
-	var (
-		item                    string
-		count, maxLen, barWidth int
-	)
-
-	for rows.Next() {
-		if err := rows.Scan(&item, &count, &maxLen, &barWidth); err != nil {
-			log.Fatalf("could not get row: %s", err.Error())
+		filename := flag.Arg(0)
+		f, err := os.Open(filename)
+		if err != nil {
+			log.Fatalf("failed to open file: %s", err)
 		}
+		defer f.Close()
 
-		if item == "OTHER" && count == 0 {
-			continue
+		reader = f
+	}
+
+	items := make(map[string]int)
+	var total int
+
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if count, ok := items[line]; ok {
+			items[line] = count + 1
+		} else {
+			items[line] = 1
 		}
+		total++
+	}
 
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("error reading file: %s", err)
+	}
+
+	h := &MaxHeap{}
+	heap.Init(h)
+
+	for key, val := range items {
+		heap.Push(h, KVPair{key, val})
+		if h.Len() > *k {
+			heap.Pop(h)
+		}
+	}
+
+	if len(*h) == 0 {
+		return
+	}
+
+	sort.Sort(sort.Reverse(h))
+
+	maxLen := 0
+	maxCount := 0 // technically just (*h)[0].Count
+	topKTotal := 0
+	for _, pair := range *h {
+		if len(pair.Item) > maxLen {
+			maxLen = len(pair.Item)
+		}
+		if pair.Count > maxCount {
+			maxCount = pair.Count
+		}
+		topKTotal += pair.Count
+	}
+
+	if *other {
+		pair := KVPair{"OTHER", total - topKTotal}
+		*h = append(*h, pair)
+		if len(pair.Item) > maxLen {
+			maxLen = len(pair.Item)
+		}
+		if pair.Count > maxCount {
+			maxCount = pair.Count
+		}
+	}
+
+	for _, pair := range *h {
+		barWidth := pair.Count * 50 / maxCount
 		bar := strings.Repeat("∎", barWidth)
-		fmt.Printf("%-*s  %6d  %s\n", maxLen, item, count, bar)
+		fmt.Printf("%-*s  %6d  %s\n", maxLen, pair.Item, pair.Count, bar)
 	}
 }
