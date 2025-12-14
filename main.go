@@ -59,11 +59,7 @@ func main() {
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if count, ok := items[line]; ok {
-			items[line] = count + 1
-		} else {
-			items[line] = 1
-		}
+		items[line]++
 		total++
 	}
 
