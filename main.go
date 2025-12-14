@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"container/heap"
 	"flag"
 	"fmt"
@@ -21,9 +22,14 @@ type KVPair struct {
 
 type MaxHeap []KVPair
 
-func (h MaxHeap) Len() int           { return len(h) }
-func (h MaxHeap) Less(i, j int) bool { return h[i].Count < h[j].Count }
-func (h MaxHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h MaxHeap) Len() int { return len(h) }
+func (h MaxHeap) Less(i, j int) bool {
+	return cmp.Or(
+		cmp.Compare(h[i].Count, h[j].Count),
+		cmp.Compare(h[i].Item, h[j].Item),
+	) < 0
+}
+func (h MaxHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
 func (h *MaxHeap) Push(x any) {
 	*h = append(*h, x.(KVPair))
