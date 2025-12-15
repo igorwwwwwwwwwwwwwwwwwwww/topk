@@ -25,7 +25,7 @@ Electric      44  ∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
 Ghost         32  ∎∎∎∎∎∎∎∎∎∎∎∎∎∎
 Dragon        32  ∎∎∎∎∎∎∎∎∎∎∎∎∎∎
 
-$ $topk -other types.txt
+$ topk -other types.txt
 Water        112  ∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
 Normal        98  ∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
 Grass         70  ∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
