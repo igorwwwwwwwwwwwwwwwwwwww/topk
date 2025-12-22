@@ -93,24 +93,16 @@ func main() {
 	maxCount := 0 // technically just (*h)[0].Count
 	topKTotal := 0
 	for _, pair := range *h {
-		if len(pair.Item) > maxLen {
-			maxLen = len(pair.Item)
-		}
-		if pair.Count > maxCount {
-			maxCount = pair.Count
-		}
+		maxLen = max(maxLen, len(pair.Item))
+		maxCount = max(maxCount, pair.Count)
 		topKTotal += pair.Count
 	}
 
 	if *other {
 		pair := KVPair{"OTHER", total - topKTotal}
 		*h = append(*h, pair)
-		if len(pair.Item) > maxLen {
-			maxLen = len(pair.Item)
-		}
-		if pair.Count > maxCount {
-			maxCount = pair.Count
-		}
+		maxLen = max(maxLen, len(pair.Item))
+		maxCount = max(maxCount, pair.Count)
 	}
 
 	for _, pair := range *h {
