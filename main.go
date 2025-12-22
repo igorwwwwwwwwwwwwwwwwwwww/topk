@@ -63,6 +63,9 @@ func main() {
 	var total int
 
 	scanner := bufio.NewScanner(reader)
+	buf := make([]byte, 1024*1024) // 1MB buffer
+	scanner.Buffer(buf, 1024*1024)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		items[line]++
