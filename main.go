@@ -20,22 +20,22 @@ type KVPair struct {
 	Count int
 }
 
-type MaxHeap []KVPair
+type MinHeap []KVPair
 
-func (h MaxHeap) Len() int { return len(h) }
-func (h MaxHeap) Less(i, j int) bool {
+func (h MinHeap) Len() int { return len(h) }
+func (h MinHeap) Less(i, j int) bool {
 	return cmp.Or(
 		cmp.Compare(h[i].Count, h[j].Count),
 		cmp.Compare(h[i].Item, h[j].Item),
 	) < 0
 }
-func (h MaxHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h MinHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
-func (h *MaxHeap) Push(x any) {
+func (h *MinHeap) Push(x any) {
 	*h = append(*h, x.(KVPair))
 }
 
-func (h *MaxHeap) Pop() any {
+func (h *MinHeap) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]
@@ -73,7 +73,7 @@ func main() {
 		log.Fatalf("error reading file: %s", err)
 	}
 
-	h := &MaxHeap{}
+	h := &MinHeap{}
 	heap.Init(h)
 
 	for key, val := range items {
