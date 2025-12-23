@@ -6,6 +6,7 @@ import (
 	"container/heap"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"sort"
@@ -43,6 +44,39 @@ func (h *MinHeap) Pop() any {
 	return x
 }
 
+func topk(reader io.Reader) (*MinHeap, int, error) {
+	items := make(map[string]int)
+	var total int
+
+	scanner := bufio.NewScanner(reader)
+	buf := make([]byte, 1024*1024) // 1MB buffer
+	scanner.Buffer(buf, 1024*1024)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		items[line]++
+		total++
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error reading file: %s", err)
+	}
+
+	h := &MinHeap{}
+	heap.Init(h)
+
+	for key, val := range items {
+		heap.Push(h, KVPair{key, val})
+		if h.Len() > *k {
+			heap.Pop(h)
+		}
+	}
+
+	sort.Sort(sort.Reverse(h))
+
+	return h, total, nil
+}
+
 func main() {
 	flag.Parse()
 
@@ -59,38 +93,14 @@ func main() {
 		reader = f
 	}
 
-	items := make(map[string]int)
-	var total int
-
-	scanner := bufio.NewScanner(reader)
-	buf := make([]byte, 1024*1024) // 1MB buffer
-	scanner.Buffer(buf, 1024*1024)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		items[line]++
-		total++
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatalf("error reading file: %s", err)
-	}
-
-	h := &MinHeap{}
-	heap.Init(h)
-
-	for key, val := range items {
-		heap.Push(h, KVPair{key, val})
-		if h.Len() > *k {
-			heap.Pop(h)
-		}
+	h, total, err := topk(reader)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	if len(*h) == 0 {
 		return
 	}
-
-	sort.Sort(sort.Reverse(h))
 
 	maxLen := 0
 	maxCount := 0 // technically just (*h)[0].Count
