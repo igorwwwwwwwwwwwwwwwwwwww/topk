@@ -23,6 +23,11 @@ var enableOther = flag.Bool("other", false, "include sum count of remaining valu
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 var memprofile = flag.String("memprofile", "", "write memory profile to this file")
 
+type Filter struct {
+	Alpha map[uint64]int
+	C     map[uint64]int
+}
+
 type KVPair struct {
 	Item  string
 	Hash  uint64
@@ -102,20 +107,22 @@ func filteredSpaceSaving(reader io.Reader, k int) (*MinHeap, int, error) {
 	buf := make([]byte, 1024*1024) // 1MB buffer
 	scanner.Buffer(buf, 1024*1024)
 
+	// TODO: fixed seed for consistency?
 	seed := maphash.MakeSeed()
 	mask := uint64((1 << *filterBits) - 1)
-	filterA := make(map[uint64]int)
-	filterC := make(map[uint64]int)
+	filter := Filter{
+		Alpha: make(map[uint64]int),
+		C:     make(map[uint64]int),
+	}
 
 	monitored := make(map[string]*KVPair)
 	var total int
 
-	// TODO: consider Stream-Summary data structure
-	//       for more efficient updates.
 	h := &MinHeap{}
 	heap.Init(h)
 
 	heapK := int(float64(k) * *spaceSavingFactor)
+	heapK = max(k, heapK)
 
 	for scanner.Scan() {
 		total++
@@ -123,7 +130,7 @@ func filteredSpaceSaving(reader io.Reader, k int) (*MinHeap, int, error) {
 		hash := maphash.Bytes(seed, scanner.Bytes())
 		bucket := hash & mask
 
-		if ci := filterC[bucket]; ci > 0 {
+		if filter.C[bucket] > 0 {
 			line := scanner.Text()
 			if pair, ok := monitored[line]; ok {
 				pair.Count++
@@ -136,22 +143,22 @@ func filteredSpaceSaving(reader io.Reader, k int) (*MinHeap, int, error) {
 		if h.Len() > 0 {
 			hMin = (*h)[0].Count
 		}
-		if filterA[bucket]+1 >= hMin {
+		if filter.Alpha[bucket]+1 >= hMin {
 			line := scanner.Text()
 			if h.Len() >= heapK {
 				pair := heap.Pop(h).(*KVPair)
 				delete(monitored, pair.Item)
-				filterC[pair.Hash&mask]--
-				filterA[pair.Hash&mask] = pair.Count
+				filter.C[pair.Hash&mask]--
+				filter.Alpha[pair.Hash&mask] = pair.Count
 			}
 
-			pair := &KVPair{line, hash, filterA[bucket] + 1, filterA[bucket], -1}
+			pair := &KVPair{line, hash, filter.Alpha[bucket] + 1, filter.Alpha[bucket], -1}
 			heap.Push(h, pair)
 			monitored[line] = pair
 
-			filterC[bucket]++
+			filter.C[bucket]++
 		} else {
-			filterA[bucket]++
+			filter.Alpha[bucket]++
 		}
 	}
 
