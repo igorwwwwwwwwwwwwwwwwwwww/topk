@@ -6,6 +6,7 @@ import (
 	"container/heap"
 	"flag"
 	"fmt"
+	"hash/maphash"
 	"io"
 	"log"
 	"os"
@@ -15,15 +16,18 @@ import (
 )
 
 var k = flag.Int("k", 10, "limit to this many top values")
-var enableSpaceSaving = flag.Bool("space-saving", false, "approvimate results via space-saving algorithm (zipf), factor by which to scale k")
-var spaceSavingFactor = flag.Float64("space-saving-factor", 10.0, "approvimate results via space-saving algorithm (zipf), factor by which to scale k")
+var approx = flag.Bool("approx", false, "approximate results via filtered space-saving algorithm (zipf)")
+var filterBits = flag.Int("fss-bits", 8, "bits to use for filter hash table")
+var spaceSavingFactor = flag.Float64("fss-factor", 5.0, "factor by which to scale k for space-saving")
 var enableOther = flag.Bool("other", false, "include sum count of remaining values")
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 var memprofile = flag.String("memprofile", "", "write memory profile to this file")
 
 type KVPair struct {
 	Item  string
+	Hash  uint64
 	Count int
+	Error int
 	Index int
 }
 
@@ -32,8 +36,9 @@ type MinHeap []*KVPair
 func (h MinHeap) Len() int { return len(h) }
 func (h MinHeap) Less(i, j int) bool {
 	return cmp.Or(
-		cmp.Compare(h[i].Count, h[j].Count),
-		cmp.Compare(h[i].Item, h[j].Item),
+		cmp.Compare(h[i].Count, h[j].Count), // <
+		cmp.Compare(h[j].Error, h[i].Count), // >
+		cmp.Compare(h[i].Item, h[j].Item),   // >
 	) < 0
 }
 func (h MinHeap) Swap(i, j int) {
@@ -81,7 +86,7 @@ func topk(reader io.Reader, k int) (*MinHeap, int, error) {
 	heap.Init(h)
 
 	for key, val := range items {
-		heap.Push(h, &KVPair{key, val, -1})
+		heap.Push(h, &KVPair{key, 0, val, 0, -1})
 		if h.Len() > k {
 			heap.Pop(h)
 		}
@@ -92,10 +97,15 @@ func topk(reader io.Reader, k int) (*MinHeap, int, error) {
 	return h, total, nil
 }
 
-func spaceSaving(reader io.Reader, k int) (*MinHeap, int, error) {
+func filteredSpaceSaving(reader io.Reader, k int) (*MinHeap, int, error) {
 	scanner := bufio.NewScanner(reader)
 	buf := make([]byte, 1024*1024) // 1MB buffer
 	scanner.Buffer(buf, 1024*1024)
+
+	seed := maphash.MakeSeed()
+	mask := uint64((1 << *filterBits) - 1)
+	filterA := make(map[uint64]int)
+	filterC := make(map[uint64]int)
 
 	monitored := make(map[string]*KVPair)
 	var total int
@@ -108,24 +118,41 @@ func spaceSaving(reader io.Reader, k int) (*MinHeap, int, error) {
 	heapK := int(float64(k) * *spaceSavingFactor)
 
 	for scanner.Scan() {
-		line := scanner.Text()
-		if pair, ok := monitored[line]; ok {
-			pair.Count++
-			heap.Fix(h, pair.Index)
-		} else if h.Len() >= heapK {
-			pair := (*h)[0]
-			delete(monitored, pair.Item)
-			pair.Item = line
-			pair.Count++
-			heap.Fix(h, pair.Index)
-			monitored[line] = pair
-			// TODO: track over-estimation
-		} else {
-			pair := &KVPair{line, 1, -1}
+		total++
+
+		hash := maphash.Bytes(seed, scanner.Bytes())
+		bucket := hash & mask
+
+		if ci := filterC[bucket]; ci > 0 {
+			line := scanner.Text()
+			if pair, ok := monitored[line]; ok {
+				pair.Count++
+				heap.Fix(h, pair.Index)
+			}
+			continue
+		}
+
+		hMin := 0
+		if h.Len() > 0 {
+			hMin = (*h)[0].Count
+		}
+		if filterA[bucket]+1 >= hMin {
+			line := scanner.Text()
+			if h.Len() >= heapK {
+				pair := heap.Pop(h).(*KVPair)
+				delete(monitored, pair.Item)
+				filterC[pair.Hash&mask]--
+				filterA[pair.Hash&mask] = pair.Count
+			}
+
+			pair := &KVPair{line, hash, filterA[bucket] + 1, filterA[bucket], -1}
 			heap.Push(h, pair)
 			monitored[line] = pair
+
+			filterC[bucket]++
+		} else {
+			filterA[bucket]++
 		}
-		total++
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -176,8 +203,8 @@ func main() {
 	}
 
 	algo := topk
-	if *enableSpaceSaving {
-		algo = spaceSaving
+	if *approx {
+		algo = filteredSpaceSaving
 	}
 
 	h, total, err := algo(reader, *k)
@@ -199,7 +226,7 @@ func main() {
 	}
 
 	if *enableOther {
-		pair := KVPair{"OTHER", total - topKTotal, -1}
+		pair := KVPair{"OTHER", 0, total - topKTotal, 0, -1}
 		*h = append(*h, &pair)
 		maxLen = max(maxLen, len(pair.Item))
 		maxCount = max(maxCount, pair.Count)
