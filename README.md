@@ -45,6 +45,12 @@ Alternatively, it's also possible to pipe from stdin:
 $ cat types.txt | topk
 ```
 
+For approximate results using the filtered space-saving algorithm, you can pass `-approx`:
+
+```
+$ topk -approx types.txt
+```
+
 ## Why
 
 Because my fingers hurt from typing `sort | uniq -c | sort -rn | head`.
